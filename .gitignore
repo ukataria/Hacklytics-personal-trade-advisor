@@ -5,3 +5,4 @@ node_modules/
 *.pyc
 build/
 dist/
+/finbert_finetuned/model.safetensors
