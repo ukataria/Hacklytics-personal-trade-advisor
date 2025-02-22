@@ -1,10 +1,11 @@
-Flask
-Flask-Cors
-Flask-SQLAlchemy
+flask
+flask-Cors
+flask_sqlalchemy
 psycopg2-binary
 pandas
 numpy
 requests
+passlib[bcrypt]
 nltk
 transformers
 statsmodels
@@ -14,3 +15,10 @@ xgboost
 yfinance
 python-dotenv
 scikit-learn
+bcrypt
+sklearn
+transformers
+torchvision
+psycopg2
+bs4
+os
