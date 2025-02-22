@@ -1,4 +1,3 @@
-# backend/app.py
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
@@ -15,6 +14,7 @@ from modules.vector_store import VectorStore
 from modules.sentiment import get_sentiment
 import numpy as np
 import pandas as pd
+import datetime
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
@@ -29,10 +29,9 @@ app.register_blueprint(auth_bp, url_prefix="/auth")
 with app.app_context():
     db.create_all()
 
-# Initialize vector store (for demonstration, we assume it is empty or load an existing index)
+# Initialize vector store (or load an existing index)
 vector_store = VectorStore()
-# Optionally, you can load an existing FAISS index:
-# vector_store.load_index("faiss_index")
+# Optionally load: vector_store.load_index("faiss_index")
 
 @app.route("/upload_trades", methods=["POST"])
 def upload_trades():
@@ -94,13 +93,33 @@ def analyze_trades():
     else:
         pattern_analysis = {"message": "No trades to analyze."}
     
-    # (Optional) You can call get_stock_data or get_news_data here to add market context.
-    # For RAG: For each ticker, retrieve documents from the vector store and compute sentiment.
+    # Extract unique tickers from trade data
     tickers = trade_df["ticker"].dropna().unique()
+    
+    # Fetch market data for each ticker using get_stock_data
+    market_data_summary = {}
+    end_date = datetime.datetime.today().strftime("%Y-%m-%d")
+    start_date = (datetime.datetime.today() - datetime.timedelta(days=180)).strftime("%Y-%m-%d")
+    for ticker in tickers:
+        try:
+            stock_data = get_stock_data(ticker, start_date, end_date)
+            if not stock_data.empty:
+                recent_close = float(stock_data["Close"].iloc[-1])
+            else:
+                recent_close = None
+            market_data_summary[ticker] = {
+                "recent_close": recent_close,
+                "data_points": len(stock_data)
+            }
+        except Exception as e:
+            market_data_summary[ticker] = {"error": str(e)}
+    
+    # (Optional) You could also fetch news data here using get_news_data
+    
+    # RAG: For each ticker, use the vector store and sentiment analysis to get aggregated sentiment
     aggregated_sentiment = {}
     for ticker in tickers:
-        # Here, you should compute the query embedding for the ticker.
-        # For demonstration, we'll generate a random vector. Replace this with a proper embedding.
+        # Replace with your actual embedding function. For demonstration, using random vector.
         query_embedding = np.random.randn(vector_store.index.d).astype(np.float32)
         retrieved_docs = vector_store.search(query_embedding, top_k=3)
         sentiments = []
@@ -110,13 +129,14 @@ def analyze_trades():
             sentiments.append(sscore)
         aggregated_sentiment[ticker] = float(np.mean(sentiments)) if sentiments else 0.0
     
-    # Build the context for recommendation.
+    # Build final context for recommendation generation
     context_str = (
         f"Trade patterns: {pattern_analysis}. "
+        f"Market data: {market_data_summary}. "
         f"Aggregated sentiment scores: {aggregated_sentiment}."
     )
     ai_rec = generate_trade_recommendation(context_str)
-    final_rec = create_final_recommendation(pattern_analysis, aggregated_sentiment, ai_rec)
+    final_rec = create_final_recommendation(pattern_analysis, {"market": market_data_summary, "sentiment": aggregated_sentiment}, ai_rec)
     
     return jsonify(final_rec)
 
