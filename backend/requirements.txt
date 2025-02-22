@@ -1,0 +1,17 @@
+Flask
+Flask-JWT-Extended
+Flask-SQLAlchemy
+Flask-Cors
+psycopg2-binary
+pandas
+numpy
+requests
+nltk
+transformers
+statsmodels
+tensorflow
+keras
+xgboost
+yfinance
+python-dotenv
+scikit-learn
