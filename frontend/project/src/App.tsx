@@ -1,65 +1,80 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Upload, FileUp, AlertCircle, CheckCircle2 } from 'lucide-react';
+import axios from 'axios';
 
-interface AnalysisResult {
-  category: string;
-  finding: string;
-  severity: 'info' | 'warning' | 'success';
-}
+// ----------------- CHART -----------------
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 function App() {
-  // ============================
+  // -------------------------------
   // AUTH STATE
-  // ============================
+  // -------------------------------
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  // ============================
-  // FILE/ANALYSIS STATE
-  // ============================
+  // -------------------------------
+  // FILE & ANALYSIS STATE
+  // -------------------------------
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [results, setResults] = useState<AnalysisResult[]>([]);
 
-  // ============================
+  // We'll store the full server response in `analysisResult`
+  // e.g. { trade_patterns: {...}, personalized_advice: "...", etc. }
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+
+  // -------------------------------
   // LOGIN HANDLER
-  // ============================
+  // -------------------------------
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
     try {
-      const resp = await fetch('http://localhost:8000/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Important: let browser store the session cookie
-        body: JSON.stringify({ username, password })
-      });
+      // Using axios, but you can also use fetch if you prefer
+      const resp = await axios.post(
+        'http://localhost:8000/auth/login',
+        { username, password },
+        { withCredentials: true } // Important for session cookie
+      );
 
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Login failed: ${text}`);
-      }
-
-      // parse the JSON
-      const data = await resp.json();
-      console.log('Login success:', data);
+      console.log('Login success:', resp.data);
       setLoggedIn(true);
       setLoginError('');
     } catch (err: any) {
       console.error(err);
-      setLoginError(err.message || 'Failed to login');
+      setLoginError(err.response?.data?.message || 'Failed to login');
     }
   };
 
-  // ============================
+  // -------------------------------
   // DRAG & DROP
-  // ============================
+  // -------------------------------
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -81,109 +96,106 @@ function App() {
     }
   }, []);
 
-  // ============================
+  // -------------------------------
   // FILE INPUT
-  // ============================
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setUploadStatus(null);
-    }
-  }, []);
+  // -------------------------------
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFile = e.target.files?.[0];
+      if (selectedFile) {
+        setFile(selectedFile);
+        setUploadStatus(null);
+      }
+    },
+    []
+  );
 
-  // ============================
+  // -------------------------------
   // UPLOAD TRADES
-  // ============================
+  // -------------------------------
   const handleUploadToServer = async () => {
     if (!file) return;
 
     setUploadStatus(null);
     setAnalysisError(null);
-    setResults([]);
+    setAnalysisResult(null);
 
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch('http://localhost:8000/upload_trades', {
-        method: 'POST',
-        credentials: 'include', // to include session cookie
-        body: formData
-      });
+      // Using axios here
+      const resp = await axios.post(
+        'http://localhost:8000/upload_trades',
+        formData,
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'multipart/form-data' }
+        }
+      );
 
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Upload failed: ${text}`);
-      }
-
-      const data = await resp.json();
-      console.log('Upload success:', data);
+      console.log('Upload success:', resp.data);
       setUploadStatus('Uploaded successfully');
     } catch (err: any) {
       console.error(err);
-      setUploadStatus(err.message || 'Upload error');
+      setUploadStatus(err.response?.data?.message || 'Upload error');
     }
   };
 
-  // ============================
+  // -------------------------------
   // ANALYZE TRADES
-  // ============================
+  // -------------------------------
   const handleAnalyzeTrades = async () => {
     setIsAnalyzing(true);
     setAnalysisError(null);
-    setResults([]);
+    setAnalysisResult(null);
 
     try {
-      const resp = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        credentials: 'include' // must include session cookie
-      });
+      const resp = await axios.post(
+        'http://localhost:8000/analyze',
+        {},
+        { withCredentials: true }
+      );
 
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Analyze failed: ${text}`);
-      }
-
-      const data = await resp.json();
-      console.log('Analyze results:', data);
-
-      // The shape of your final recommendation can vary; 
-      // for demonstration, let's assume it might have a 'trade_patterns' or 'personalized_advice'.
-      // Convert that data into your AnalysisResult[] shape as needed:
-      // e.g. you might parse data to something like:
-      // setResults([
-      //   { category: 'Trade Patterns', finding: JSON.stringify(data.trade_patterns), severity: 'info' },
-      //   { category: 'Advice', finding: data.personalized_advice, severity: 'success' }
-      // ]);
-
-      // For now, let's just do a quick example:
-      setResults([
-        {
-          category: 'Pattern Analysis',
-          finding: JSON.stringify(data.trade_patterns),
-          severity: 'info'
-        },
-        {
-          category: 'AI Advice',
-          finding: data.personalized_advice,
-          severity: 'success'
-        }
-      ]);
+      console.log('Analyze results:', resp.data);
+      setAnalysisResult(resp.data);
     } catch (err: any) {
       console.error(err);
-      setAnalysisError(err.message || 'Analyze error');
+      setAnalysisError(err.response?.data || 'Analyze error');
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  // -------------------------------
+  // CHART DATA (Profit by Trade)
+  // -------------------------------
+  const chartData = useMemo(() => {
+    if (!analysisResult?.trade_patterns?.trade_data) return null;
+
+    const trades = analysisResult.trade_patterns.trade_data;
+    return {
+      labels: trades.map((t: any) => `Trade ${t.TradeID}`),
+      datasets: [
+        {
+          label: 'Profit',
+          data: trades.map((t: any) => t.Profit || 0),
+          borderColor: 'rgba(75,192,192,1)',
+          backgroundColor: 'rgba(75,192,192,0.2)'
+        }
+      ]
+    };
+  }, [analysisResult]);
+
+  // -------------------------------
+  // RENDER
+  // -------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
       <div className="max-w-4xl mx-auto">
-        {/* ================================
-            LOGIN FORM
-        ================================ */}
+        {/* =======================================
+            LOGIN FORM (only if not logged in)
+        ======================================= */}
         {!loggedIn && (
           <div className="bg-white p-4 mb-4 rounded shadow">
             <h2 className="text-lg font-semibold mb-2">Login Required</h2>
@@ -225,6 +237,7 @@ function App() {
           </div>
         )}
 
+        {/* If logged in, show success banner */}
         {loggedIn && (
           <div className="bg-green-100 text-green-700 p-3 rounded mb-4">
             You are logged in!
@@ -234,9 +247,12 @@ function App() {
         {/* Only show the file upload + analysis UI if user is logged in */}
         {loggedIn && (
           <>
+            {/* Title */}
             <div className="flex items-center gap-3 mb-8">
               <Upload className="w-8 h-8 text-indigo-600" />
-              <h1 className="text-3xl font-bold text-gray-800">Financial Gap Analysis</h1>
+              <h1 className="text-3xl font-bold text-gray-800">
+                Financial Gap Analysis
+              </h1>
             </div>
 
             {/* Drag-and-Drop Area */}
@@ -273,7 +289,9 @@ function App() {
               ) : (
                 <div className="flex flex-col items-center justify-center gap-2">
                   <CheckCircle2 className="w-6 h-6 text-green-500" />
-                  <p className="text-gray-700">{file.name} uploaded (not yet sent)</p>
+                  <p className="text-gray-700">
+                    {file.name} uploaded (not yet sent)
+                  </p>
                   <button
                     onClick={handleUploadToServer}
                     className="mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
@@ -307,14 +325,14 @@ function App() {
               Analyze Trades
             </button>
 
-            {/* Show analyze error if any */}
+            {/* Analyze error */}
             {analysisError && (
               <div className="bg-red-100 text-red-600 p-3 rounded mb-4">
                 {analysisError}
               </div>
             )}
 
-            {/* Show analyzing spinner */}
+            {/* Analyzing Spinner */}
             {isAnalyzing && (
               <div className="bg-white rounded-xl p-6 mb-6 text-center">
                 <div className="animate-pulse">
@@ -323,39 +341,103 @@ function App() {
               </div>
             )}
 
-            {/* Analysis Results */}
-            {results.length > 0 && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-gray-800 mb-6">
+            {/* ========================
+                ANALYSIS RESULTS
+            ======================== */}
+            {analysisResult && (
+              <div className="space-y-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-2">
                   Analysis Results
                 </h2>
-                {results.map((result, index) => (
-                  <div
-                    key={index}
-                    className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div
-                        className={`
-                          p-2 rounded-lg
-                          ${result.severity === 'warning' ? 'bg-amber-100 text-amber-600' : ''}
-                          ${result.severity === 'success' ? 'bg-green-100 text-green-600' : ''}
-                          ${result.severity === 'info' ? 'bg-blue-100 text-blue-600' : ''}
-                        `}
-                      >
-                        <AlertCircle className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-800 mb-1">
-                          {result.category}
-                        </h3>
-                        <p className="text-gray-600">
-                          {result.finding}
-                        </p>
+
+                {/* Pattern Analysis */}
+                <div className="bg-white rounded-xl p-4 shadow">
+                  <h3 className="text-lg font-bold text-gray-800 mb-3">
+                    Pattern Analysis
+                  </h3>
+
+                  {/* 1) Show table of trade_data */}
+                  {analysisResult.trade_patterns?.trade_data && (
+                    <div className="mb-4">
+                      <h4 className="text-md font-semibold mb-2">Trade Details</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border text-sm">
+                          <thead>
+                            <tr className="bg-gray-100">
+                              <th className="px-2 py-1 border">Trade ID</th>
+                              <th className="px-2 py-1 border">Actions</th>
+                              <th className="px-2 py-1 border">Buy Date</th>
+                              <th className="px-2 py-1 border">Sell Date</th>
+                              <th className="px-2 py-1 border">Duration</th>
+                              <th className="px-2 py-1 border">Profit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analysisResult.trade_patterns.trade_data.map(
+                              (trade: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                  <td className="px-2 py-1 border">{trade.TradeID}</td>
+                                  <td className="px-2 py-1 border">{trade.Actions}</td>
+                                  <td className="px-2 py-1 border">
+                                    {String(trade.BuyDate)}
+                                  </td>
+                                  <td className="px-2 py-1 border">
+                                    {String(trade.SellDate)}
+                                  </td>
+                                  <td className="px-2 py-1 border">{trade.Duration}</td>
+                                  <td className="px-2 py-1 border">
+                                    {trade.Profit?.toFixed?.(2) ?? trade.Profit}
+                                  </td>
+                                </tr>
+                              )
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
+                  )}
+
+                  {/* 2) Show cluster info, if any */}
+                  {analysisResult.trade_patterns?.clusters && (
+                    <div className="mb-2">
+                      <h4 className="text-md font-semibold mb-2">
+                        Cluster Summary
+                      </h4>
+                      <pre className="text-xs bg-gray-50 p-2 rounded border text-gray-600 whitespace-pre-wrap">
+                        {JSON.stringify(analysisResult.trade_patterns.clusters, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* AI Advice */}
+                <div className="bg-white rounded-xl p-4 shadow">
+                  <h3 className="text-lg font-bold text-gray-800 mb-3">AI Advice</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap">
+                    {analysisResult.personalized_advice || 'No advice provided'}
+                  </p>
+                </div>
+
+                {/* Chart: Profit by Trade */}
+                {chartData && (
+                  <div className="bg-white p-4 rounded shadow">
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">
+                      Profit by Trade
+                    </h3>
+                    <Line
+                      data={chartData}
+                      options={{
+                        responsive: true,
+                        plugins: {
+                          legend: { display: true }
+                        },
+                        scales: {
+                          y: { beginAtZero: true }
+                        }
+                      }}
+                    />
                   </div>
-                ))}
+                )}
               </div>
             )}
           </>
