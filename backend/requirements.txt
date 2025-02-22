@@ -1,7 +1,6 @@
 Flask
-Flask-JWT-Extended
-Flask-SQLAlchemy
 Flask-Cors
+Flask-SQLAlchemy
 psycopg2-binary
 pandas
 numpy
