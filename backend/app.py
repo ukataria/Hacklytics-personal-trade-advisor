@@ -9,7 +9,7 @@ from modules.preprocessing import calculate_trade_metrics
 from modules.trade_analysis import analyze_trade_patterns
 from modules.market_data import get_stock_data, get_news_data
 from modules.recommendation import generate_trade_recommendation
-from ensemble import create_final_recommendation
+from modules.ensemble import create_final_recommendation
 from modules.vector_store import VectorStore
 from modules.sentiment import get_sentiment
 import numpy as np
@@ -47,6 +47,12 @@ def upload_trades():
         return jsonify({"message": f"Error parsing CSV: {str(e)}"}), 400
     user_id = session["user_id"]
     for _, row in parsed_df.iterrows():
+        activity_date = row.get("activity_date")
+        process_date = row.get("process_date")
+        settle_date = row.get("settle_date")
+        if pd.isna(activity_date): activity_date = None
+        if pd.isna(process_date): process_date = None
+        if pd.isna(settle_date): settle_date = None
         trade = Trade(
             user_id=user_id,
             activity_date=row.get("activity_date"),
