@@ -20,3 +20,5 @@ sklearn
 transformers
 torchvision
 psycopg2
+bs4
+os
