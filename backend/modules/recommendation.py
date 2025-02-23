@@ -2,7 +2,7 @@ import subprocess
 
 def generate_trade_recommendation(context: str) -> str:
     prompt = (
-        f"""You only give advice based on the gaps found in trade data.
+        f"""You only give advice based on the gaps found in trade data. Don't feel the need to justify.
 Your primary role is to identify and analyze gaps such as price discrepancies, volume anomalies, timing irregularities, or missing data points. 
 You do not make predictions or provide general financial advice. Your insights are solely focused on explaining the causes and implications of these gaps, 
 offering strategic responses, and highlighting potential opportunities or risks associated with them.
