@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, FileUp, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -12,47 +12,75 @@ import {
   LineElement,
   Title,
   Tooltip,
+  ArcElement,
   Legend
 } from 'chart.js';
-import annotationPlugin from 'chartjs-plugin-annotation';
-import { Line, Bar } from 'react-chartjs-2';
+import { Line, Bar, Pie } from 'react-chartjs-2';
 
-// Register chart.js components and plugins
+// Register chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
   PointElement,
   BarElement,
   LineElement,
+  ArcElement,
   Title,
   Tooltip,
-  Legend,
-  annotationPlugin
+  Legend
 );
 
 function App() {
   // -------------------------------
   // AUTH STATE
   // -------------------------------
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [loggedIn, setLoggedIn] = useState<boolean>(false);
+  const [loginError, setLoginError] = useState<string>('');
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
 
   // -------------------------------
   // FILE & ANALYSIS STATE
   // -------------------------------
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [showMore, setShowMore] = useState(false);
-
-  // We'll store the full server response in `analysisResult`
-  // e.g. { trade_patterns: {...}, personalized_advice: "...", etc. }
+  const [showMore, setShowMore] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+
+  // New state for fake loading progress
+  const [fakeProgress, setFakeProgress] = useState<number>(0);
+
+  // Simulate loading progress while analyzing (slower increments)
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isAnalyzing) {
+      setFakeProgress(0);
+      // Increase progress by 3 every 200ms until reaching 90%
+      interval = setInterval(() => {
+        setFakeProgress((prev) => (prev < 90 ? prev + 3 : prev));
+      }, 400);
+    }
+    return () => clearInterval(interval);
+  }, [isAnalyzing]);
+
+  // Generate a dynamic loading message based on fakeProgress
+  const loadingMessage = useMemo(() => {
+    if (fakeProgress < 20) {
+      return "Gappy starting up...";
+    } else if (fakeProgress < 40) {
+      return "Fetching real-time market trends...";
+    } else if (fakeProgress < 60) {
+      return "Crunching numbers...";
+    } else if (fakeProgress < 80) {
+      return "Generating report...";
+    } else {
+      return "Finalizing gappy...";
+    }
+  }, [fakeProgress]);
 
   // -------------------------------
   // LOGIN HANDLER
@@ -60,7 +88,6 @@ function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-
     try {
       const resp = await axios.post(
         'http://localhost:8000/auth/login',
@@ -79,20 +106,19 @@ function App() {
   // -------------------------------
   // DRAG & DROP
   // -------------------------------
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
       setFile(droppedFile);
@@ -103,31 +129,25 @@ function App() {
   // -------------------------------
   // FILE INPUT
   // -------------------------------
-  const handleFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFile = e.target.files?.[0];
-      if (selectedFile) {
-        setFile(selectedFile);
-        setUploadStatus(null);
-      }
-    },
-    []
-  );
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setUploadStatus(null);
+    }
+  }, []);
 
   // -------------------------------
   // UPLOAD TRADES
   // -------------------------------
   const handleUploadToServer = async () => {
     if (!file) return;
-
     setUploadStatus(null);
     setAnalysisError(null);
     setAnalysisResult(null);
-
     try {
       const formData = new FormData();
       formData.append('file', file);
-
       const resp = await axios.post(
         'http://localhost:8000/upload_trades',
         formData,
@@ -136,10 +156,8 @@ function App() {
           headers: { 'Content-Type': 'multipart/form-data' }
         }
       );
-
       console.log('Upload success:', resp.data);
       setUploadStatus('Uploaded successfully!');
-      // Clear the file from state so it doesn't keep prompting the user
       setFile(null);
     } catch (err: any) {
       console.error(err);
@@ -148,13 +166,12 @@ function App() {
   };
 
   // -------------------------------
-  // ANALYZE TRADES
+  // ANALYZE TRADES WITH FAKE LOADING MODAL
   // -------------------------------
   const handleAnalyzeTrades = async () => {
     setIsAnalyzing(true);
     setAnalysisError(null);
     setAnalysisResult(null);
-
     try {
       const resp = await axios.post(
         'http://localhost:8000/analyze',
@@ -167,7 +184,12 @@ function App() {
       console.error(err);
       setAnalysisError(err.response?.data || 'Analyze error');
     } finally {
-      setIsAnalyzing(false);
+      setFakeProgress(100);
+      // Increase the delay to 1 second before hiding the modal
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        setFakeProgress(0);
+      }, 1000);
     }
   };
 
@@ -177,7 +199,6 @@ function App() {
   const durationChartData = useMemo(() => {
     const trades = analysisResult?.trade_patterns?.trade_data;
     if (!trades) return null;
-
     return {
       labels: trades.map((t: any) => `Trade ${t.TradeID}`),
       datasets: [
@@ -193,7 +214,7 @@ function App() {
   }, [analysisResult]);
 
   // -------------------------------
-  // CHART #2: PROFIT DISTRIBUTION BY TICKER (HARDCODED)
+  // CHART #2: PROFIT DISTRIBUTION BY TICKER 
   // -------------------------------
   const profitChartData = useMemo(() => {
     const hardcodedData = [
@@ -203,19 +224,17 @@ function App() {
       { ticker: 'MSFT', total_profit: 90.25 },
       { ticker: 'NIO', total_profit: 50.0 },
     ];
-
     return {
       labels: hardcodedData.map((item) => item.ticker),
       datasets: [
         {
           label: 'Profit',
           data: hardcodedData.map((item) => item.total_profit),
-          // Green for positive, Red for negative
           backgroundColor: hardcodedData.map((item) =>
-            item.total_profit < 0 ? 'rgba(255, 99, 132, 0.6)' : 'rgba(34,197,94,0.6)'
+            item.total_profit < 0 ? 'rgba(255, 99, 132, 0.6)' : 'rgba(34, 197, 94, 0.6)'
           ),
           borderColor: hardcodedData.map((item) =>
-            item.total_profit < 0 ? 'rgba(255, 99, 132, 1)' : 'rgba(34,197,94,1)'
+            item.total_profit < 0 ? 'rgba(255, 99, 132, 1)' : 'rgba(34, 197, 94, 0.6)'
           ),
           borderWidth: 1,
         },
@@ -224,33 +243,48 @@ function App() {
   }, []);
 
   // -------------------------------
-  // OPTIONS FOR PROFIT CHART WITH A BLACK LINE AT y=0
+  // CHART: CLUSTER SUMMARY AS PIE CHARTS
   // -------------------------------
-  const profitChartOptions = useMemo(() => ({
-    responsive: true,
-    plugins: {
-      legend: { display: true },
-      title: { display: false },
-      annotation: {
-        annotations: {
-          zeroLine: {
-            type: 'line',
-            yMin: 0,
-            yMax: 0,
-            borderColor: 'black',
-            borderWidth: 2,
-          },
+  const clusterDurationPieData = useMemo(() => {
+    const clusters = analysisResult?.trade_patterns?.clusters;
+    if (!clusters || !clusters.Duration_mean) return null;
+    const labels = Object.keys(clusters.Duration_mean);
+    const customLabels = labels.map(label =>
+      label === "0" ? "Long Term" : label === "1" ? "Short Term" : `Cluster ${label}`
+    );
+    return {
+      labels: customLabels,
+      datasets: [
+        {
+          data: labels.map(label => clusters.Duration_mean[label]),
+          backgroundColor: labels.map(label =>
+            label === "0" ? 'rgba(75,192,192,0.6)' : 'rgba(54,162,235,0.6)'
+          ),
         },
-      },
-    },
-    scales: {
-      y: { beginAtZero: true },
-    },
-  }), []);
+      ],
+    };
+  }, [analysisResult]);
 
-  // -------------------------------
-  // RENDER
-  // -------------------------------
+  const profitCountPieData = useMemo(() => {
+    const clusters = analysisResult?.trade_patterns?.clusters;
+    if (!clusters || !clusters.Profit_count) return null;
+    const labels = Object.keys(clusters.Profit_count);
+    const customLabels = labels.map(label =>
+      label === "0" ? "Short Term" : label === "1" ? "Long Term" : `Cluster ${label}`
+    );
+    return {
+      labels: customLabels,
+      datasets: [
+        {
+          data: labels.map(label => clusters.Profit_count[label]),
+          backgroundColor: labels.map(label =>
+            label === "0" ? 'rgba(255, 99, 132, 0.6)' : 'rgba(255, 159, 64, 0.6)'
+          ),
+        },
+      ],
+    };
+  }, [analysisResult]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
       <div className="max-w-4xl mx-auto">
@@ -261,7 +295,7 @@ function App() {
           <div className="bg-white p-6 mb-6 rounded shadow-sm max-w-md mx-auto">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Log In</h2>
             <p className="text-gray-500 mb-6">
-              Enter your credentials to access Financial Gap Analysis.
+              Enter your credentials to access <span className="font-bold">g a p p y</span>.
             </p>
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
@@ -301,22 +335,18 @@ function App() {
           </div>
         )}
 
-        {/* If logged in, show success banner */}
-        {loggedIn && (
-          <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center font-medium">
-            You are logged in!
-          </div>
-        )}
-
-        {/* Only show the file upload + analysis UI if user is logged in */}
+        {/* If logged in, show success banner and main UI */}
         {loggedIn && (
           <>
+            {/* Success Banner */}
+            <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-center font-medium">
+              You are logged in!
+            </div>
+
             {/* Title */}
             <div className="flex items-center gap-3 mb-8">
               <Upload className="w-8 h-8 text-indigo-600" />
-              <h1 className="text-5xl font-bold text-gray-800 logo-font">
-                gappy
-              </h1>
+              <h1 className="text-5xl font-bold text-gray-800 logo-font">gappy</h1>
             </div>
 
             {/* Drag-and-Drop Area */}
@@ -398,122 +428,20 @@ function App() {
               Analyze Trades
             </button>
 
-            {/* Analyze error */}
+            {/* ANALYSIS RESULTS */}
             {analysisError && (
               <div className="bg-red-100 text-red-600 p-3 rounded mb-4">
                 {analysisError}
               </div>
             )}
 
-            {/* Analyzing Spinner */}
-            {isAnalyzing && (
-              <div className="bg-white rounded-xl p-6 mb-6 text-center">
-                <div className="animate-pulse">
-                  <p className="text-gray-600">Analyzing your trades...</p>
-                </div>
-              </div>
-            )}
-
-            {/* ========================
-                ANALYSIS RESULTS
-            ======================== */}
             {analysisResult && (
               <div className="space-y-6">
                 <h2 className="text-2xl font-semibold text-gray-800 mb-4">
                   Analysis Results
                 </h2>
 
-                {/* Pattern Analysis */}
-                <div className="bg-white rounded-xl p-6 shadow-lg">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4">
-                    Pattern Analysis
-                  </h3>
-
-                  {/* 1) Show table of trade_data with "Show More" logic */}
-                  {analysisResult.trade_patterns?.trade_data && (
-                    <div className="overflow-x-auto">
-                      <div
-                        className="overflow-y-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-gray-100 transition-all duration-500"
-                        style={{
-                          maxHeight: showMore ? '600px' : '300px'
-                        }}
-                      >
-                        <table className="min-w-full bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                          <thead className="sticky top-0 bg-indigo-600 text-white text-sm leading-normal shadow-md">
-                            <tr>
-                              <th className="py-3 px-4 text-left">Trade ID</th>
-                              <th className="py-3 px-4 text-left">Actions</th>
-                              <th className="py-3 px-4 text-left">Buy Date</th>
-                              <th className="py-3 px-4 text-left">Sell Date</th>
-                              <th className="py-3 px-4 text-center">Duration (Days)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="text-gray-700 text-sm font-light">
-                            {analysisResult.trade_patterns.trade_data
-                              .slice(
-                                0,
-                                showMore
-                                  ? analysisResult.trade_patterns.trade_data.length
-                                  : 5
-                              )
-                              .map((trade: any, idx: number) => (
-                                <tr
-                                  key={idx}
-                                  className={`border-b border-gray-200 hover:bg-indigo-50 transition-colors ${
-                                    idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
-                                  }`}
-                                >
-                                  <td className="py-3 px-4">{trade.TradeID}</td>
-                                  <td className="py-3 px-4">{trade.Actions}</td>
-                                  <td className="py-3 px-4">{String(trade.BuyDate)}</td>
-                                  <td className="py-3 px-4">{String(trade.SellDate)}</td>
-                                  <td className="py-3 px-4 text-center">
-                                    {trade.Duration ?? '--'}
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Show More Button */}
-                      <div className="mt-4 text-center">
-                        <button
-                          onClick={() => setShowMore(!showMore)}
-                          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition-colors"
-                        >
-                          {showMore ? 'Show Less' : 'Show More'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 2) Show cluster info, if any */}
-                  {analysisResult.trade_patterns?.clusters && (
-                    <div className="mt-4">
-                      <h4 className="text-md font-semibold mb-2">Cluster Summary</h4>
-                      <pre className="text-xs bg-gray-50 p-4 rounded border text-gray-600 whitespace-pre-wrap">
-                        {JSON.stringify(analysisResult.trade_patterns.clusters, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-
-                {/* AI Advice */}
-                <div className="bg-white rounded-xl p-6 shadow-lg">
-                  <h3 className="text-lg font-bold text-gray-800 mb-4">AI Advice</h3>
-                  <p
-                    className="text-gray-700 whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{
-                      __html: (analysisResult.personalized_advice || 'No advice provided').replace(
-                        /\*\*(.*?)\*\*/g,
-                        '<strong>$1</strong>'
-                      )
-                    }}
-                  />
-                </div>
-
-                {/* TWO CHARTS SIDE-BY-SIDE */}
+                {/* Two Charts on Top */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Chart 1: Duration by Trade */}
                   <div className="bg-white p-6 rounded-xl shadow-lg">
@@ -525,19 +453,14 @@ function App() {
                         data={durationChartData}
                         options={{
                           responsive: true,
-                          plugins: {
-                            legend: { display: true },
-                            title: { display: false }
-                          },
-                          scales: {
-                            y: { beginAtZero: true }
-                          }
+                          plugins: { legend: { display: true }, title: { display: false } },
+                          scales: { y: { beginAtZero: true } },
                         }}
                       />
                     )}
                   </div>
 
-                  {/* Chart 2: Hardcoded Profit Distribution with black line at y=0 */}
+                  {/* Chart 2: Profit Distribution */}
                   <div className="bg-white p-6 rounded-xl shadow-lg">
                     <h3 className="text-lg font-bold text-gray-800 mb-4">
                       Profit Distribution
@@ -545,16 +468,96 @@ function App() {
                     {profitChartData && (
                       <Bar
                         data={profitChartData}
-                        options={profitChartOptions}
+                        options={{
+                          responsive: true,
+                          plugins: { legend: { display: true }, title: { display: false } },
+                          scales: { y: { beginAtZero: true } },
+                        }}
                       />
                     )}
                   </div>
                 </div>
+
+                {/* AI Advice Section */}
+                <div className="bg-white rounded-xl p-6 shadow-lg">
+                  <h3 className="text-lg font-bold text-gray-800 mb-4">AI Advice</h3>
+                  <p
+                    className="text-gray-700 whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{
+                      __html: (analysisResult.personalized_advice || 'No advice provided').replace(
+                        /\*\*(.*?)\*\*/g,
+                        '<strong>$1</strong>'
+                      ),
+                    }}
+                  />
+                </div>
+
+                {/* Pie Charts Section */}
+                {analysisResult.trade_patterns?.clusters && (
+                  <div className="mt-4">
+                    <h4 className="text-md font-semibold mb-2">Cluster Summary</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white p-4 rounded shadow">
+                        <h5 className="text-md font-semibold mb-2">
+                          Long Term Vs Short Term
+                        </h5>
+                        {clusterDurationPieData ? (
+                          <Pie
+                            key={`pie-${JSON.stringify(clusterDurationPieData)}`}
+                            data={clusterDurationPieData}
+                            options={{
+                              responsive: true,
+                              plugins: { legend: { display: true }, title: { display: false } },
+                            }}
+                          />
+                        ) : (
+                          <p>No cluster data available.</p>
+                        )}
+                      </div>
+                      <div className="bg-white p-4 rounded shadow">
+                        <h5 className="text-md font-semibold mb-2">Profit Count</h5>
+                        {profitCountPieData ? (
+                          <Pie
+                            key={`pie-profit-${JSON.stringify(profitCountPieData)}`}
+                            data={profitCountPieData}
+                            options={{
+                              responsive: true,
+                              plugins: { legend: { display: true }, title: { display: false } },
+                            }}
+                          />
+                        ) : (
+                          <p>No profit count data available.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* Modal Pop-up for Fake Loading Bar with Increased Size */}
+      {isAnalyzing && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black opacity-90"></div>
+          {/* Modal content */}
+          <div className="relative bg-white p-6 rounded w-full sm:w-3/4 md:w-1/2 lg:w-1/3">
+            <h3 className="text-lg font-bold mb-4 text-center">
+              {loadingMessage}
+            </h3>
+            <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+              <div
+                className="bg-blue-600 h-4 rounded-full transition-all duration-100"
+                style={{ width: `${fakeProgress}%` }}
+              ></div>
+            </div>
+            
+          </div>
+        </div>
+      )}
     </div>
   );
 }
