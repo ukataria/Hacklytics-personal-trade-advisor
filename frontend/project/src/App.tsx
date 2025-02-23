@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, FileUp, AlertCircle, CheckCircle2 } from 'lucide-react';
 
-// CHART IMPORTS
+//imports
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -67,7 +67,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isAnalyzing]);
 
-  // Generate a dynamic loading message based on fakeProgress
+  // Dynamic loading message based on progress bar
   const loadingMessage = useMemo(() => {
     if (fakeProgress < 20) {
       return "Gappy starting up...";
@@ -538,7 +538,6 @@ function App() {
         )}
       </div>
 
-      {/* Modal Pop-up for Fake Loading Bar with Increased Size */}
       {isAnalyzing && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           {/* Backdrop */}
