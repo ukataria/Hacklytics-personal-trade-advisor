@@ -78,11 +78,13 @@ def upload_trades():
 def analyze_trades():
     if "user_id" not in session:
         return jsonify({"message": "Unauthorized"}), 401
+
     user_id = session["user_id"]
     trades = Trade.query.filter_by(user_id=user_id).all()
     if not trades:
         return jsonify({"message": "No trade data found. Please upload CSV first."}), 400
     
+    # 1) Convert trades to a DataFrame
     trade_list = []
     for t in trades:
         trade_list.append({
@@ -90,23 +92,45 @@ def analyze_trades():
             "parsed_action": t.parsed_action,
             "price": t.price,
             "quantity": t.quantity,
-            "ticker": t.instrument
+            "ticker": t.instrument  # i.e. 'AAPL', 'TSLA', etc.
         })
     trade_df = pd.DataFrame(trade_list)
+
+    # 2) If no data, return early
+    if trade_df.empty:
+        return jsonify({
+            "message": "No trades to analyze.",
+            "trade_patterns": {},
+            "profit_by_ticker": [],
+        })
+
+    # 3) Calculate trade metrics (Duration, Profit, Ticker, etc.)
+    trade_metrics = calculate_trade_metrics(trade_df)
     
-    if not trade_df.empty:
-        trade_metrics = calculate_trade_metrics(trade_df)
-        pattern_analysis = analyze_trade_patterns(trade_metrics)
+    # 4) Analyze trade patterns (clusters, etc.)
+    pattern_analysis = analyze_trade_patterns(trade_metrics)
+
+    # 5) Summarize total profit by ticker for charts, etc.
+    if "Ticker" in trade_metrics.columns and "Profit" in trade_metrics.columns:
+        profit_summary = (
+            trade_metrics.groupby("Ticker")["Profit"].sum().reset_index()
+        )
+        # Convert to a list of dicts like [{ticker: 'AAPL', total_profit: 123.45}, ...]
+        profit_by_ticker = []
+        for _, row in profit_summary.iterrows():
+            profit_by_ticker.append({
+                "ticker": row["Ticker"],
+                "total_profit": float(row["Profit"])
+            })
     else:
-        pattern_analysis = {"message": "No trades to analyze."}
-    
-    # Extract unique tickers from trade data
+        profit_by_ticker = []
+
+    # 6) Optionally fetch market data (e.g. last 180 days)
     tickers = trade_df["ticker"].dropna().unique()
-    
-    # Fetch market data for each ticker using get_stock_data
-    market_data_summary = {}
     end_date = datetime.datetime.today().strftime("%Y-%m-%d")
     start_date = (datetime.datetime.today() - datetime.timedelta(days=180)).strftime("%Y-%m-%d")
+
+    market_data_summary = {}
     for ticker in tickers:
         try:
             stock_data = get_stock_data(ticker, start_date, end_date)
@@ -120,13 +144,11 @@ def analyze_trades():
             }
         except Exception as e:
             market_data_summary[ticker] = {"error": str(e)}
-    
-    # (Optional) You could also fetch news data here using get_news_data
-    
-    # RAG: For each ticker, use the vector store and sentiment analysis to get aggregated sentiment
+
+    # 7) Sentiment / RAG approach
     aggregated_sentiment = {}
     for ticker in tickers:
-        # Replace with your actual embedding function. For demonstration, using random vector.
+        # e.g. random embedding for demonstration
         query_embedding = np.random.randn(vector_store.index.d).astype(np.float32)
         retrieved_docs = vector_store.search(query_embedding, top_k=3)
         sentiments = []
@@ -135,17 +157,25 @@ def analyze_trades():
             sscore = get_sentiment(content)
             sentiments.append(sscore)
         aggregated_sentiment[ticker] = float(np.mean(sentiments)) if sentiments else 0.0
-    
-    # Build final context for recommendation generation
+
+    # 8) Build context + generate AI recommendation
     context_str = (
         f"Trade patterns: {pattern_analysis}. "
         f"Market data: {market_data_summary}. "
         f"Aggregated sentiment scores: {aggregated_sentiment}."
     )
     ai_rec = generate_trade_recommendation(context_str)
-    final_rec = create_final_recommendation(pattern_analysis, {"market": market_data_summary, "sentiment": aggregated_sentiment}, ai_rec)
-    
+    final_rec = create_final_recommendation(
+        pattern_analysis,
+        {"market": market_data_summary, "sentiment": aggregated_sentiment},
+        ai_rec
+    )
+
+    # 9) Attach the profit_by_ticker array to final_rec
+    final_rec["profit_by_ticker"] = profit_by_ticker
+
     return jsonify(final_rec)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)

@@ -54,9 +54,7 @@ def parse_robinhood_csv(file_content: bytes) -> pd.DataFrame:
     
     trade_code_map = {
         "BTO": "Buy to Open",
-        "STC": "Sell to Close",
-        "STO": "Sell to Open",
-        "BTC": "Buy to Close"
+        "STC": "Sell to Close"
     }
     
     for idx, row in df.iterrows():

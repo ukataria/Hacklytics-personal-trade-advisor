@@ -1,3 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.logo-font {
+    font-family: 'Futura', sans-serif;
+    letter-spacing: 0.05em;
+    transition: transform 0.3s ease;
+  }
+  
+  .logo-font:hover {
+    transform: scale(1.05);
+    color: #4F46E5; /* Adjust this to match your theme */
+  }
+  
