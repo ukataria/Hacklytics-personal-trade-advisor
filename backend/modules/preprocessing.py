@@ -1,5 +1,3 @@
-# backend/modules/preprocessing.py
-
 import pandas as pd
 
 def calculate_trade_metrics(trade_df: pd.DataFrame) -> pd.DataFrame:

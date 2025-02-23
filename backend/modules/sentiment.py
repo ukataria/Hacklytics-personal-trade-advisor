@@ -1,7 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
-# Path to your fine-tuned FinBERT model in the finbert_finetuned directory.
 MODEL_NAME = "/Users/utsav/Hacklytics-personal-trade-advisor/finbert_finetuned"
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
