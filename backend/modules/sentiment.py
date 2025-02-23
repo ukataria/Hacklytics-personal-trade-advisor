@@ -9,6 +9,7 @@ model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, local_fil
 
 def get_sentiment(text: str) -> float:
     """
+    Don't provide initial justification.
     Returns a sentiment score for the given text.
     For example, if the labels are [negative, neutral, positive], we can compute:
     sentiment_score = positive_score - negative_score.
